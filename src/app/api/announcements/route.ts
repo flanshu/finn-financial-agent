@@ -1,51 +1,100 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { PORTFOLIO, type Stock } from "@/lib/portfolio";
 import { MOCK_ANNOUNCEMENTS } from "@/lib/mock-data";
+import { classifyFiling, exchangeTimestamp } from "@/lib/filings";
+import type { Announcement, TimeWindow } from "@/lib/types";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const window = searchParams.get("window") || "7d";
-  const category = searchParams.get("category");
-  const priority = searchParams.get("priority");
+export const maxDuration = 120;
+interface BSEItem {
+  SCRIP_CD?: number | string; NEWSID?: string; HEADLINE?: string; NEWSSUB?: string;
+  NEWS_DT?: string; DT_TM?: string; ATTACHMENTNAME?: string; OLD?: number; SUBCATNAME?: string;
+}
+interface Feed { announcements: Announcement[]; failed: string[]; incomplete: string[]; checked: number }
+let cached: { expires: number; feed: Feed } | undefined;
+let pending: Promise<Feed> | undefined;
 
-  let filtered = [...MOCK_ANNOUNCEMENTS];
-
-  // Filter by time window
+async function companyFilings(stock: Stock): Promise<{ announcements: Announcement[]; complete: boolean }> {
   const now = new Date();
-  const windowMs: Record<string, number> = {
-    "24h": 24 * 60 * 60 * 1000,
-    "3d": 3 * 24 * 60 * 60 * 1000,
-    "7d": 7 * 24 * 60 * 60 * 1000,
-  };
-  const cutoff = new Date(now.getTime() - (windowMs[window] || windowMs["7d"]));
-  filtered = filtered.filter((a) => new Date(a.date) >= cutoff);
-
-  // Filter by category
-  if (category && category !== "all") {
-    filtered = filtered.filter((a) => a.category === category);
+  const day = (d: Date) => new Date(d.getTime() + 330 * 60000).toISOString().slice(0, 10).replaceAll("-", "");
+  const from = day(new Date(now.getTime() - 7 * 86400000));
+  const rows = new Map<string, Announcement>();
+  let seen = 0, previousPage = "";
+  for (let page = 1; page <= 5; page++) {
+    const params = new URLSearchParams({ pageno: String(page), strCat: "-1", strPrevDate: from, strScrip: stock.bseCode!, strSearch: "P", strToDate: day(now), strType: "C" });
+    const response = await fetch(`https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w?${params}`, {
+      signal: AbortSignal.timeout(8000), headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json", Referer: "https://www.bseindia.com/" },
+    });
+    if (!response.ok) throw new Error("Exchange unavailable");
+    const data = await response.json();
+    if (!Array.isArray(data.Table)) throw new Error("Unexpected exchange response");
+    const items = data.Table as BSEItem[];
+    if (!items.length) return { announcements: [...rows.values()], complete: true };
+    const signature = JSON.stringify(items.map(item => [item.NEWSID, item.ATTACHMENTNAME, item.NEWS_DT, item.HEADLINE]));
+    if (signature === previousPage) return { announcements: [...rows.values()], complete: false };
+    previousPage = signature;
+    seen += items.length;
+    for (const item of items) {
+      if (String(item.SCRIP_CD) !== stock.bseCode) continue;
+      const date = exchangeTimestamp(item.NEWS_DT || item.DT_TM || "");
+      if (!date) continue;
+      const headline = (item.NEWSSUB || item.HEADLINE || "Exchange disclosure").replace(/^Announcement under Regulation 30 \(LODR\)-/i, "").trim();
+      const classification = classifyFiling(`${item.NEWSSUB || ""} ${headline} ${item.SUBCATNAME || ""}`);
+      const id = `bse-${stock.bseCode}-${item.NEWSID || item.ATTACHMENTNAME || `${date}-${headline}`}`;
+      const attachment = item.ATTACHMENTNAME && /^[a-zA-Z0-9_.-]+\.pdf$/i.test(item.ATTACHMENTNAME) ? item.ATTACHMENTNAME : null;
+      rows.set(id, { id, ticker: stock.ticker, companyName: stock.name, ...classification,
+        headline, summary: item.HEADLINE || item.NEWSSUB || headline, date, source: "BSE",
+        sourceUrl: attachment ? `https://www.bseindia.com/xml-data/corpfiling/${item.OLD ? "AttachHis" : "AttachLive"}/${attachment}` : undefined,
+      });
+    }
+    const total = Number(data.Table1?.[0]?.ROWCNT);
+    if (Number.isFinite(total) && seen >= total) return { announcements: [...rows.values()], complete: true };
+    // Without a row count, fetch until an empty page or the explicit page cap.
   }
+  return { announcements: [...rows.values()], complete: false };
+}
 
-  // Filter by priority
-  if (priority && priority !== "all") {
-    filtered = filtered.filter((a) => a.priority === priority);
+async function loadFeed(): Promise<Feed> {
+  const stocks = PORTFOLIO.filter(stock => stock.bseCode);
+  const feed: Feed = { announcements: [], failed: [], incomplete: [], checked: 0 };
+  // Six workers keep requests bounded while avoiding a serial model call per filing.
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(6, stocks.length) }, async () => {
+    while (next < stocks.length) {
+      const stock = stocks[next++];
+      try {
+        const result = await companyFilings(stock);
+        feed.announcements.push(...result.announcements); feed.checked++;
+        if (!result.complete) feed.incomplete.push(stock.ticker);
+      } catch { feed.failed.push(stock.ticker); }
+    }
+  }));
+  return feed;
+}
+
+export async function GET(request: NextRequest) {
+  const params = new URL(request.url).searchParams;
+  const timeWindow = (params.get("window") || "24h") as TimeWindow;
+  if (!["24h", "3d", "7d"].includes(timeWindow)) return NextResponse.json({ error: "Window must be 24h, 3d, or 7d." }, { status: 400 });
+  const demo = params.get("demo") === "1";
+  let feed: Feed;
+  if (demo) feed = { announcements: [...MOCK_ANNOUNCEMENTS], failed: [], incomplete: [], checked: PORTFOLIO.length };
+  else if (cached && cached.expires > Date.now()) feed = cached.feed;
+  else {
+    if (!pending) pending = loadFeed().then(result => { cached = { feed: result, expires: Date.now() + 60000 }; return result; }).finally(() => { pending = undefined; });
+    feed = await pending;
   }
-
-  // Sort by priority weight then date
-  const priorityWeight: Record<string, number> = {
-    critical: 0,
-    high: 1,
-    medium: 2,
-    low: 3,
-  };
-  filtered.sort((a, b) => {
-    const pw = (priorityWeight[a.priority] ?? 3) - (priorityWeight[b.priority] ?? 3);
-    if (pw !== 0) return pw;
-    return new Date(b.date).getTime() - new Date(a.date).getTime();
-  });
-
-  return NextResponse.json({
-    announcements: filtered,
-    total: filtered.length,
-    window,
-    lastUpdated: new Date().toISOString(),
-  });
+  const now = Date.now();
+  const hours = { "24h": 24, "3d": 72, "7d": 168 };
+  const cutoff = now - hours[timeWindow] * 3600000;
+  const windowCounts = Object.fromEntries(Object.entries(hours).map(([window, count]) => [window, feed.announcements.filter(a => Date.parse(a.date) >= now - count * 3600000 && Date.parse(a.date) <= now).length]));
+  const latestAvailableAt = feed.announcements.map(a => a.date).filter(date => Date.parse(date) <= now).sort().at(-1) || null;
+  const weights = { critical: 4, high: 3, medium: 2, low: 1 };
+  const announcements = feed.announcements.filter(a => new Date(a.date).getTime() >= cutoff && new Date(a.date).getTime() <= Date.now() && (!params.get("category") || a.category === params.get("category")) && (!params.get("priority") || a.priority === params.get("priority"))).sort((a, b) => weights[b.priority] - weights[a.priority] || Date.parse(b.date) - Date.parse(a.date));
+  const unavailable = !demo && PORTFOLIO.length > 0 && feed.checked === 0;
+  return NextResponse.json({ announcements, total: announcements.length, timeWindow, source: demo ? "mock" : unavailable ? "unavailable" : "bse",
+    windowCounts, latestAvailableAt,
+    coverage: { checked: feed.checked, total: PORTFOLIO.length, failed: feed.failed, incomplete: feed.incomplete },
+    classification: "Headline-based triage; open the filing to verify materiality",
+    error: unavailable ? "Exchange feed is unavailable. Please retry." : undefined, lastUpdated: new Date().toISOString(),
+  }, { status: unavailable ? 503 : 200 });
 }

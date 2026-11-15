@@ -1,4 +1,4 @@
-import { PriceData, Announcement, PriceAlert } from "./types";
+import { PriceData, Announcement, PriceAlert, ResearchReport } from "./types";
 
 // Realistic mock price data for the portfolio
 export const MOCK_PRICES: PriceData[] = [
@@ -212,8 +212,7 @@ export const MOCK_ALERTS: PriceAlert[] = [
 ];
 
 // Mock research report for demo
-export const MOCK_RESEARCH: Record<string, any> = {
-  ZOMATO: {
+export const MOCK_RESEARCH: ResearchReport = {
     ticker: "ZOMATO",
     companyName: "Zomato",
     generatedAt: "2026-11-11T18:00:00",
@@ -273,5 +272,123 @@ export const MOCK_RESEARCH: Record<string, any> = {
         },
       ],
     },
+};
+
+export const MOCK_RESEARCH_DMART: ResearchReport = {
+  ticker: "DMART",
+  companyName: "Avenue Supermarts (DMart)",
+  generatedAt: "2026-11-12T14:30:00",
+  businessSnapshot: {
+    description: "Avenue Supermarts owns and operates the DMart chain of supermarkets, focusing on value retailing of everyday essentials. It maintains a low-cost structure through store ownership, cluster-based expansion, and high inventory turns.",
+    segments: ["Foods (Groceries, Staples)", "Non-Foods FMCG (Toiletries, Home Care)", "General Merchandise & Apparel"],
+    revenueMix: "Foods ~56%, Non-Foods FMCG ~20%, General Merchandise & Apparel ~24% (FY26)",
+    keyProducts: "DMart Hypermarkets (370+ stores), DMart Ready (online grocery), DMart Minimax, Private Label Brands",
+  },
+  financialSnapshot: {
+    revenue: "₹54,320 Cr (FY26, +17.2% YoY)",
+    ebitda: "₹4,210 Cr (FY26, +14.5% YoY)",
+    pat: "₹2,740 Cr (FY26, +13.8% YoY)",
+    ebitdaMargin: "7.7% (vs 7.9% in FY25)",
+    patMargin: "5.0% (vs 5.2% in FY25)",
+    debtToEquity: "0.04x (virtually debt-free)",
+    roce: "18.5%",
+    highlights: [
+      "Consistent double-digit same-store sales growth (SSSG) in mature clusters",
+      "Store count reached 374 across 12 states",
+      "Apparel & general merchandise recovery aiding gross margins",
+      "Cash from operations remains exceptionally strong with negative working capital cycle",
+    ],
+  },
+  narrativeVsNumbers: {
+    summary: "Management delivered on store expansion pace and inventory turnover, but gross margins remained under pressure due to value competitive intensity from quick commerce in urban grocery staples.",
+    comparisons: [
+      {
+        metric: "Store addition guidance",
+        management_said: "FY25 concall: 'We target adding 40-45 new stores annually'",
+        actual: "Added 41 new stores in FY26 — fully delivered",
+        verdict: "aligned",
+      },
+      {
+        metric: "Gross margin recovery",
+        management_said: "Q2 FY26 concall: 'Expect gross margins to expand towards 15.5% as discretionary mix recovers'",
+        actual: "Gross margin stood at 14.8% due to FMCG price competition and quick commerce discounts",
+        verdict: "missed",
+      },
+      {
+        metric: "DMart Ready e-commerce turnaround",
+        management_said: "Q3 FY25 concall: 'Targeting operating breakeven in top 2 metro clusters'",
+        actual: "Achieved positive operational cash flow in Mumbai and MMR clusters in Q3 FY26",
+        verdict: "exceeded",
+      },
+      {
+        metric: "Private label contribution",
+        management_said: "FY25 AR: 'Expand own-brand share to >10% of non-food shelf space'",
+        actual: "Private label share touched 11.4% in non-food categories",
+        verdict: "exceeded",
+      },
+    ],
   },
 };
+
+export const MOCK_RESEARCH_TITAN: ResearchReport = {
+  ticker: "TITAN",
+  companyName: "Titan Company",
+  generatedAt: "2026-11-13T11:00:00",
+  businessSnapshot: {
+    description: "Titan Company is a premier consumer lifestyle player under the Tata Group, holding market leadership across organized jewelry, branded watches, eyewear, and fragrance in India.",
+    segments: ["Jewellery (Tanishq, Mia, CaratLane)", "Watches & Wearables", "Eyewear", "Emerging (Fragrances, Taneira)"],
+    revenueMix: "Jewellery ~88%, Watches & Wearables ~9%, Eyewear ~2%, Others ~1% (FY26)",
+    keyProducts: "Tanishq, CaratLane, Mia by Tanishq, Titan Watches, Fastrack, Sonata, Titan Eye+",
+  },
+  financialSnapshot: {
+    revenue: "₹51,080 Cr (FY26, +21.4% YoY)",
+    ebitda: "₹5,250 Cr (FY26, +16.8% YoY)",
+    pat: "₹3,490 Cr (FY26, +14.2% YoY)",
+    ebitdaMargin: "10.3% (vs 10.7% in FY25)",
+    patMargin: "6.8% (vs 7.2% in FY25)",
+    debtToEquity: "0.25x",
+    roce: "24.1%",
+    highlights: [
+      "Tanishq domestic buyer growth up 18% YoY despite elevated gold prices",
+      "CaratLane crossed ₹3,200 Cr revenue mark growing at 40%+ YoY",
+      "International business footprint expanded to 28 operational stores",
+      "Gold exchange program contributed 35% of overall jewellery sales volume",
+    ],
+  },
+  narrativeVsNumbers: {
+    summary: "Titan demonstrated resilient revenue growth driven by wedding demand and CaratLane momentum, though jewelry EBIT margin saw mild dilution following the customs duty reduction inventory adjustment.",
+    comparisons: [
+      {
+        metric: "Jewellery EBIT margin target",
+        management_said: "Q4 FY25 concall: 'We will maintain jewellery EBIT margins in the 12-13% corridor'",
+        actual: "Reported jewellery EBIT margin of 10.8% due to one-time customs duty inventory impact and gold price volatility",
+        verdict: "missed",
+      },
+      {
+        metric: "CaratLane revenue growth",
+        management_said: "FY25 concall: 'CaratLane can sustain 35%+ revenue CAGR over the medium term'",
+        actual: "Delivered 42% YoY growth in FY26 outperforming guidance",
+        verdict: "exceeded",
+      },
+      {
+        metric: "International store footprint",
+        management_said: "FY25 AR: 'Target 25 international Tanishq stores operational by end of FY26'",
+        actual: "Opened 28 overseas stores across GCC, US, and Singapore",
+        verdict: "exceeded",
+      },
+      {
+        metric: "Watches & wearables volume growth",
+        management_said: "Q2 FY26 concall: 'Targeting double-digit volume growth in premium watch lines'",
+        actual: "Titan and Fastrack premium lines grew 11.5% in volume",
+        verdict: "aligned",
+      },
+    ],
+  },
+};
+
+export const MOCK_RESEARCH_MAP: Record<string, ResearchReport> = {
+  ZOMATO: MOCK_RESEARCH,
+  DMART: MOCK_RESEARCH_DMART,
+  TITAN: MOCK_RESEARCH_TITAN,
+};
+

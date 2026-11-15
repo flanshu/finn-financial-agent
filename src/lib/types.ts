@@ -45,7 +45,15 @@ export interface Announcement {
   };
 }
 
+export interface ResearchSource {
+  id: string;
+  title: string;
+  url: string;
+  kind: "annual_report" | "transcript";
+}
+
 export interface ResearchReport {
+  sources?: ResearchSource[];
   ticker: string;
   companyName: string;
   generatedAt: string;
