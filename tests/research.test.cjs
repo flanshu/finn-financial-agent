@@ -17,7 +17,7 @@ function load(file, mocks = {}) {
 }
 const helper = load("src/lib/research.ts");
 const eod = load("src/lib/eod.ts");
-const filings = load("src/lib/filings.ts");
+const filings = load("src/lib/filings.ts", { "./research": helper });
 const source = { id: "S1", title: "Annual report", url: "https://www.bseindia.com/report.pdf", kind: "annual_report" };
 const unknown = "Not disclosed in retrieved sources";
 function valid() {
@@ -109,14 +109,14 @@ test("live research never substitutes demo research when the API key is missing"
 });
 test("an empty live exchange feed does not become a mock feed", async () => {
   const oldFetch = global.fetch;
-  const route = load("src/app/api/announcements/route.ts", { "@/lib/filings": filings, "@/lib/portfolio": { PORTFOLIO: [{ ticker: "TEST", bseCode: "123" }] }, "@/lib/mock-data": { MOCK_ANNOUNCEMENTS: [{ date: new Date().toISOString(), priority: "high" }] } });
+  const route = load("src/app/api/announcements/route.ts", { "@/lib/research": helper, "@/lib/filings": filings, "@/lib/portfolio": { PORTFOLIO: [{ ticker: "TEST", bseCode: "123" }] }, "@/lib/mock-data": { MOCK_ANNOUNCEMENTS: [{ date: new Date().toISOString(), priority: "high" }] } });
   try {
     global.fetch = async () => Response.json({ Table: [] });
     const response = await route.GET(new Request("http://localhost/api/announcements"));
     const result = await response.json();
     assert.equal(result.source, "bse"); assert.deepEqual(result.announcements, []);
     global.fetch = async () => new Response("blocked", { status: 403 });
-    const unavailableRoute = load("src/app/api/announcements/route.ts", { "@/lib/filings": filings, "@/lib/portfolio": { PORTFOLIO: [{ ticker: "TEST", bseCode: "123" }] }, "@/lib/mock-data": { MOCK_ANNOUNCEMENTS: [] } });
+    const unavailableRoute = load("src/app/api/announcements/route.ts", { "@/lib/research": helper, "@/lib/filings": filings, "@/lib/portfolio": { PORTFOLIO: [{ ticker: "TEST", bseCode: "123" }] }, "@/lib/mock-data": { MOCK_ANNOUNCEMENTS: [] } });
     assert.equal((await unavailableRoute.GET(new Request("http://localhost/api/announcements"))).status, 503);
   } finally { global.fetch = oldFetch; }
 });
@@ -156,7 +156,7 @@ test("filing triage is deterministic and exchange timestamps are interpreted as 
 });
 test("filings are queried per holding, paginated, and retain source URLs", async () => {
   const oldFetch = global.fetch; const calls = [];
-  const route = load("src/app/api/announcements/route.ts", { "@/lib/filings": filings, "@/lib/portfolio": { PORTFOLIO: [{ ticker: "TEST", name: "Test company", bseCode: "123" }] }, "@/lib/mock-data": { MOCK_ANNOUNCEMENTS: [] } });
+  const route = load("src/app/api/announcements/route.ts", { "@/lib/research": helper, "@/lib/filings": filings, "@/lib/portfolio": { PORTFOLIO: [{ ticker: "TEST", name: "Test company", bseCode: "123" }] }, "@/lib/mock-data": { MOCK_ANNOUNCEMENTS: [] } });
   try {
     global.fetch = async url => {
       const u = new URL(url); calls.push(u); const page = Number(u.searchParams.get("pageno"));
@@ -168,4 +168,12 @@ test("filings are queried per holding, paginated, and retain source URLs", async
     assert.equal(data.announcements.length, 2); assert.equal(data.coverage.checked, 1);
     assert(data.announcements[0].sourceUrl.includes("AttachHis"));
   } finally { global.fetch = oldFetch; }
+});
+
+test("index fallback keeps original filing links and dates while excluding AI summaries", () => {
+ const html = `<div id="company-announcements-tab"><ul><li><a href="https://www.bseindia.com/stockinfo/AnnPdfOpen.aspx?Pname=abc-123.pdf">Quarterly financial results<div>AI summary must not enter the headline<time datetime="2026-11-13T16:00:00+05:30">Nov 13</time></div></a></li></ul></div><div class="documents annual-reports"><a href="https://www.bseindia.com/ar.pdf">Annual report</a></div>`;
+ const rows = filings.indexedFilings(html, { ticker: "TEST", name: "Test", sector: "IT", yf: "TEST.NS" });
+ assert.equal(rows.length, 1); assert.equal(rows[0].headline, "Quarterly financial results");
+ assert.equal(rows[0].date, "2026-11-13T10:30:00.000Z"); assert(rows[0].sourceUrl.includes("AttachHis/abc-123.pdf"));
+ assert.equal(filings.indexedFilings("blocked", { ticker: "TEST" }), null);
 });

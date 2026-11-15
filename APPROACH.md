@@ -28,8 +28,14 @@ Live and Demo are explicit modes. A failed live provider response stays unavaila
 
 ## Validation and limits
 
-Sixteen fixture-based tests cover research discovery, PDF URLs, bounded reads, citations, missing evidence, caching, explicit demo behavior, daily-bar alignment, exchange timestamps, per-company filing pagination, and empty live results. TypeScript and ESLint checks pass. Browser inspection verified live filings, a visible chat composer, report retention across sessions, and preference persistence.
+Seventeen fixture-based tests cover research discovery, PDF URLs, bounded reads, citations, missing evidence, caching, explicit demo behavior, daily-bar alignment, exchange timestamps, per-company filing pagination, and empty live results. TypeScript and ESLint checks pass. Browser inspection verified live filings, a visible chat composer, report retention across sessions, and preference persistence.
 
 Production build verification in the restricted Windows environment still fails when Turbopack starts its CSS worker. A passing production build is not claimed. Deployed phone behavior must be checked independently.
 
 The prototype refreshes while open; it does not deliver background notifications. Live quarterly-result PDF extraction, management biography enrichment, guaranteed exhaustive exchange coverage, durable cross-device storage and suitability-based personalisation remain future work. The submitted AI build history must be an actual conversation export or share link; this document is not a substitute.
+
+## Production deployment follow-up
+
+The public production domain was verified to load without a Vercel login. Production checks then exposed failed direct BSE requests and a missing GEMINI_API_KEY. The key must be configured in Vercel Production and applied by a new deployment; it is never committed.
+
+When a direct BSE company query fails, FINN now tries Screener's recent-announcement index for that company. Only original disclosure titles, timestamps and exchange PDF links are retained; index-generated summaries are excluded. Fallback companies are explicitly labelled indexed and incomplete, and unavailable companies remain visible. This is limited discovery, not guaranteed full exchange coverage. In a local forced-BSE-failure check, the fallback returned 30 seven-day filing links across 17 companies, with one unavailable. Its behavior from Vercel must be verified after deploying this change.

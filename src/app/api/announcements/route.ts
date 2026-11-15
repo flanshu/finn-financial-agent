@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PORTFOLIO, type Stock } from "@/lib/portfolio";
 import { MOCK_ANNOUNCEMENTS } from "@/lib/mock-data";
-import { classifyFiling, exchangeTimestamp } from "@/lib/filings";
+import { classifyFiling, exchangeTimestamp, indexedFilings } from "@/lib/filings";
+import { readBounded } from "@/lib/research";
 import type { Announcement, TimeWindow } from "@/lib/types";
 
 export const maxDuration = 120;
@@ -9,7 +10,7 @@ interface BSEItem {
   SCRIP_CD?: number | string; NEWSID?: string; HEADLINE?: string; NEWSSUB?: string;
   NEWS_DT?: string; DT_TM?: string; ATTACHMENTNAME?: string; OLD?: number; SUBCATNAME?: string;
 }
-interface Feed { announcements: Announcement[]; failed: string[]; incomplete: string[]; checked: number }
+interface Feed { announcements: Announcement[]; failed: string[]; incomplete: string[]; checked: number; indexed: string[] }
 let cached: { expires: number; feed: Feed } | undefined;
 let pending: Promise<Feed> | undefined;
 
@@ -55,7 +56,7 @@ async function companyFilings(stock: Stock): Promise<{ announcements: Announceme
 
 async function loadFeed(): Promise<Feed> {
   const stocks = PORTFOLIO.filter(stock => stock.bseCode);
-  const feed: Feed = { announcements: [], failed: [], incomplete: [], checked: 0 };
+  const feed: Feed = { announcements: [], failed: [], incomplete: [], indexed: [], checked: 0 };
   // Six workers keep requests bounded while avoiding a serial model call per filing.
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(6, stocks.length) }, async () => {
@@ -65,7 +66,18 @@ async function loadFeed(): Promise<Feed> {
         const result = await companyFilings(stock);
         feed.announcements.push(...result.announcements); feed.checked++;
         if (!result.complete) feed.incomplete.push(stock.ticker);
-      } catch { feed.failed.push(stock.ticker); }
+      } catch {
+        try {
+          const response = await fetch(`https://www.screener.in/company/${encodeURIComponent(stock.ticker)}/consolidated/`, {
+            signal: AbortSignal.timeout(8000), redirect: "error", headers: { "User-Agent": "Mozilla/5.0", Accept: "text/html" },
+          });
+          const html = (await readBounded(response, 2_000_000)).toString("utf8");
+          const rows = indexedFilings(html, stock);
+          if (rows === null) throw new Error("Index unavailable");
+          feed.announcements.push(...rows); feed.checked++;
+          feed.indexed.push(stock.ticker); feed.incomplete.push(stock.ticker);
+        } catch { feed.failed.push(stock.ticker); }
+      }
     }
   }));
   return feed;
@@ -77,7 +89,7 @@ export async function GET(request: NextRequest) {
   if (!["24h", "3d", "7d"].includes(timeWindow)) return NextResponse.json({ error: "Window must be 24h, 3d, or 7d." }, { status: 400 });
   const demo = params.get("demo") === "1";
   let feed: Feed;
-  if (demo) feed = { announcements: [...MOCK_ANNOUNCEMENTS], failed: [], incomplete: [], checked: PORTFOLIO.length };
+  if (demo) feed = { announcements: [...MOCK_ANNOUNCEMENTS], failed: [], incomplete: [], indexed: [], checked: PORTFOLIO.length };
   else if (cached && cached.expires > Date.now()) feed = cached.feed;
   else {
     if (!pending) pending = loadFeed().then(result => { cached = { feed: result, expires: Date.now() + 60000 }; return result; }).finally(() => { pending = undefined; });
@@ -93,7 +105,7 @@ export async function GET(request: NextRequest) {
   const unavailable = !demo && PORTFOLIO.length > 0 && feed.checked === 0;
   return NextResponse.json({ announcements, total: announcements.length, timeWindow, source: demo ? "mock" : unavailable ? "unavailable" : "bse",
     windowCounts, latestAvailableAt,
-    coverage: { checked: feed.checked, total: PORTFOLIO.length, failed: feed.failed, incomplete: feed.incomplete },
+    coverage: { checked: feed.checked, total: PORTFOLIO.length, failed: feed.failed, incomplete: feed.incomplete, indexed: feed.indexed },
     classification: "Headline-based triage; open the filing to verify materiality",
     error: unavailable ? "Exchange feed is unavailable. Please retry." : undefined, lastUpdated: new Date().toISOString(),
   }, { status: unavailable ? 503 : 200 });

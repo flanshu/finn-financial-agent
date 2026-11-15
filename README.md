@@ -42,7 +42,7 @@ Ask AI is restricted by its system instruction to supplied portfolio observation
 
 ## Current scope and submission limits
 
-The interface, APIs and sixteen fixture-based regression tests are implemented. Tests cover source restrictions, schema/citations, primary-only research errors and caching, explicit Demo mode, empty live feeds, zero-trigger alerts, and unfinished daily-bar exclusion. Live provider connectivity, model answer quality and deployed phone behavior still require testing.
+The interface, APIs and seventeen fixture-based regression tests are implemented. Tests cover source restrictions, schema/citations, primary-only research errors and caching, explicit Demo mode, empty live feeds, zero-trigger alerts, and unfinished daily-bar exclusion. Live provider connectivity, model answer quality and deployed phone behavior still require testing.
 
 The BSE integration queries each portfolio company separately, follows up to five pages per company, caches responses for one minute, and shows failed or capped companies. Dates without a timezone are interpreted as IST. Classification is deterministic headline triage; users should open the original filing to judge materiality. The live seven-day verification returned 40 filings across 18/18 successfully checked companies; this is one observed check, not a guarantee of future provider availability or exhaustive coverage. Live quarterly result-PDF extraction, management biography enrichment, durable cross-device storage and background notifications remain future work. Detailed financial announcement cards are demo fixtures.
 
@@ -57,3 +57,9 @@ Research retrieval fix: document discovery supports Screener's current nested `d
 The preferences panel saves investment horizon, sector focus, filing-category focus and price/volume thresholds on this browser. Sector and filing filters affect the digest and material-filing alerts; they do not change the 18-company portfolio. The chosen horizon is shown in the thesis notebook. Switching investor sessions preserves the open report. It is workflow customisation, not a suitability assessment or a personalised return forecast.
 
 The chat composer stays within the available content height. Demo reports are labelled Sample data rather than Gemini-generated research. Price cards show their observation date, the banner names missing symbols, and the feed exposes company coverage with a seven-day empty-state action. Stale requests from a previous data mode/window are ignored. The portfolio's average move is an unweighted stock average, not a holdings-weighted investment return.
+
+## Production deployment follow-up
+
+The public production domain was verified to load without a Vercel login. Production checks then exposed failed direct BSE requests and a missing GEMINI_API_KEY. The key must be configured in Vercel Production and applied by a new deployment; it is never committed.
+
+When a direct BSE company query fails, FINN now tries Screener's recent-announcement index for that company. Only original disclosure titles, timestamps and exchange PDF links are retained; index-generated summaries are excluded. Fallback companies are explicitly labelled indexed and incomplete, and unavailable companies remain visible. This is limited discovery, not guaranteed full exchange coverage. In a local forced-BSE-failure check, the fallback returned 30 seven-day filing links across 17 companies, with one unavailable. Its behavior from Vercel must be verified after deploying this change.
